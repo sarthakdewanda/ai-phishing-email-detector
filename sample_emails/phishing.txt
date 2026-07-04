@@ -1,0 +1,31 @@
+Delivered-To: alex@example.com
+Received: from mail.paypa1-support.ru (mail.paypa1-support.ru [185.23.44.9])
+        by mx.example.com with ESMTP id abc123
+        for <alex@example.com>; Mon, 05 May 2025 09:14:22 -0700 (PDT)
+Authentication-Results: mx.example.com;
+       spf=fail (sender IP is 185.23.44.9) smtp.mailfrom=paypa1-support.ru;
+       dkim=fail reason="signature verification failed";
+       dmarc=fail (p=REJECT) header.from=paypal.com
+From: "PayPal Support" <security@paypa1-support.ru>
+Reply-To: <collect-info@secure-refunds.net>
+Return-Path: <bounce@paypa1-support.ru>
+To: alex@example.com
+Subject: Urgent: Your Account Has Been Suspended
+Date: Mon, 05 May 2025 09:14:20 -0700
+Content-Type: text/plain; charset="UTF-8"
+
+Dear Customer,
+
+We detected unusual activity on your account. For your protection, your
+account has been suspended. You must verify your identity immediately to
+avoid permanent closure.
+
+This is your final notice. Click here to confirm your password and restore
+access:
+
+http://bit.ly/paypal-secure-login
+
+Failure to act now will result in your account being closed within 24 hours.
+
+Thank you,
+PayPal Security Team
