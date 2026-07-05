@@ -6,27 +6,24 @@ email module.
 
 import re
 from email import message_from_string
-from email.utils import parseaddr, getaddresses
+from email.message import Message
+from email.utils import parseaddr
+
+from rules import RULES
 
 
-KNOWN_BRANDS = [
-    "paypal", "amazon", "apple", "microsoft", "google", "netflix",
-    "bank", "facebook", "instagram", "linkedin", "dhl", "fedex",
-]
-
-
-def has_headers(raw_text):
+def has_headers(raw_text: str) -> bool:
     return bool(re.search(r'^(From|To|Subject|Received):', raw_text, re.MULTILINE))
 
 
-def _domain_of(address):
+def _domain_of(address: str) -> str:
     _, addr = parseaddr(address)
     if "@" in addr:
         return addr.split("@")[-1].lower()
     return ""
 
 
-def _parse_auth_results(msg):
+def _parse_auth_results(msg: Message) -> dict[str, str]:
     results = {"spf": "unknown", "dkim": "unknown", "dmarc": "unknown"}
     raw = " ".join(msg.get_all("Authentication-Results", []))
     if not raw:
@@ -38,40 +35,41 @@ def _parse_auth_results(msg):
     return results
 
 
-def _check_display_name_spoof(from_header):
+def _check_display_name_spoof(from_header: str) -> str | None:
     display_name, _ = parseaddr(from_header)
     domain = _domain_of(from_header)
     name_lower = display_name.lower()
 
-    for brand in KNOWN_BRANDS:
+    for brand in RULES.known_brands:
         if brand in name_lower and brand not in domain:
-            return f"Display name mentions '{brand}' but sender domain is '{domain or 'unknown'}'"
+            return (
+                f"Display name mentions '{brand}' but sender domain is "
+                f"'{domain or 'unknown'}'"
+            )
     return None
 
 
-def _check_replyto_mismatch(msg):
+def _check_replyto_mismatch(msg: Message) -> str | None:
     from_domain = _domain_of(msg.get("From", ""))
     if not from_domain:
         return None
 
     for header in ("Reply-To", "Return-Path"):
-        value = msg.get(header, "")
-        other_domain = _domain_of(value)
+        other_domain = _domain_of(msg.get(header, ""))
         if other_domain and other_domain != from_domain:
             return f"{header} domain '{other_domain}' differs from From domain '{from_domain}'"
     return None
 
 
-def analyze_headers(raw_text):
+def analyze_headers(raw_text: str) -> dict | None:
     if not has_headers(raw_text):
         return None
 
     msg = message_from_string(raw_text)
-
     auth = _parse_auth_results(msg)
-    flags = []
+    flags: list[str] = []
 
-    # Authentication failures are strong signals.
+    # Authentication failures check
     for mech in ("spf", "dkim", "dmarc"):
         if auth[mech] == "fail":
             flags.append(f"{mech.upper()} authentication failed")
@@ -86,6 +84,7 @@ def analyze_headers(raw_text):
 
     return {
         "from": msg.get("From", "(none)"),
+        "from_domain": _domain_of(msg.get("From", "")),
         "subject": msg.get("Subject", "(none)"),
         "auth": auth,
         "flags": flags,
