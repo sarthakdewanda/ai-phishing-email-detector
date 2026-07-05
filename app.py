@@ -137,7 +137,6 @@ AUTH_COLORS = {"pass": "#3fb950", "fail": "#f85149", "unknown": "#8b949e"}
 
 
 def card(title, body_html):
-    """Render a styled card with an uppercase title and HTML body."""
     st.markdown(
         f"<div class='card'><h4>{title}</h4>{body_html}</div>",
         unsafe_allow_html=True,
