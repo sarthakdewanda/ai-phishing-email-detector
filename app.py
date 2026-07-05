@@ -8,6 +8,7 @@ import streamlit as st
 from detector import score_email
 from header_analysis import analyze_headers
 from ai_explain import explain_stream
+from rules import RULES
 
 st.set_page_config(page_title="AI Phishing Detector", page_icon="🛡️", layout="centered")
 
@@ -204,6 +205,20 @@ def show_results(text):
         rows = "<span style='color:var(--muted);'>No URLs found.</span>"
     card("Extracted URLs", rows)
 
+    # --- Detected rules ---
+    if analysis["detections"]:
+        rules_html = "".join(
+            f"<div style='margin-bottom:0.6rem;'>"
+            f"<div><b>{d.matched}</b> "
+            f"<span class='brk-pts'>+{d.score}</span></div>"
+            f"<div style='color:var(--muted); font-size:0.85rem;'>{d.reason}</div>"
+            f"</div>"
+            for d in analysis["detections"]
+        )
+    else:
+        rules_html = "<span style='color:var(--muted);'>No rules triggered.</span>"
+    card("Detected Rules", rules_html)
+
     # --- Score breakdown ---
     if analysis["breakdown"]:
         brk = "".join(
@@ -226,8 +241,10 @@ def show_results(text):
 
     # --- Report summary ---
     header_flag_count = len(header_result["flags"]) if header_result else 0
+    sender = analysis["sender_domain"] or "n/a"
     report = (
         f"Risk: <b style='color:{color};'>{analysis['level']}</b> (score {analysis['score']}) &nbsp;|&nbsp; "
+        f"Sender domain: <b>{sender}</b> &nbsp;|&nbsp; "
         f"{len(analysis['keywords'])} phrase(s) &nbsp;|&nbsp; "
         f"{len(analysis['urls'])} URL(s), {len(analysis['suspicious_urls'])} flagged &nbsp;|&nbsp; "
         f"{header_flag_count} header flag(s)"
@@ -240,6 +257,15 @@ st.markdown("<div class='app-title'>🛡️ AI Phishing Email Detector</div>", u
 st.markdown(
     "<div class='app-subtitle'>Analyze an email for phishing red flags — "
     "content, links, and sender authentication.</div>",
+    unsafe_allow_html=True,
+)
+
+# Loaded rule counts — makes it clear the detection lists come from config/*.json.
+st.markdown(
+    "<div class='app-subtitle' style='font-size:0.82rem;'>"
+    f"Loaded rules: {len(RULES.keywords)} keywords &nbsp;·&nbsp; "
+    f"{len(RULES.url_shorteners)} URL shorteners &nbsp;·&nbsp; "
+    f"{len(RULES.known_brands)} brands</div>",
     unsafe_allow_html=True,
 )
 
