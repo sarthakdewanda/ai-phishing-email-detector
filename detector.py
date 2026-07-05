@@ -5,135 +5,210 @@ weighted risk scoring.
 """
 
 import re
+from dataclasses import dataclass
 
-# Suspicious phrases commonly found in phishing emails.
-# Each maps to a weight reflecting how strong a signal it is.
-SUSPICIOUS_KEYWORDS = {
-    "verify your account": 3,
-    "verify your identity": 3,
-    "confirm your password": 3,
-    "update your payment": 3,
-    "suspended": 2,
-    "unusual activity": 2,
-    "click here": 2,
-    "act now": 2,
-    "urgent": 2,
-    "immediately": 2,
-    "limited time": 2,
-    "you have won": 3,
-    "congratulations": 1,
-    "gift card": 2,
-    "wire transfer": 3,
-    "bank account": 2,
-    "social security": 3,
-    "login to confirm": 3,
-    "account will be closed": 3,
-    "final notice": 2,
-    "dear customer": 1,
-    "dear user": 1,
-}
+from rules import RULES
 
-# URL shorteners
-SUSPICIOUS_URL_HINTS = [
-    "bit.ly", "tinyurl", "goo.gl", "t.co", "ow.ly",
-    "is.gd", "buff.ly", "rebrand.ly",
-]
-
+# Matches http/https URLs up to the first whitespace or common delimiter.
 URL_REGEX = re.compile(r'https?://[^\s<>"\')]+', re.IGNORECASE)
 
+# Matches a URL whose host is a raw IPv4 address.
+IP_URL_REGEX = re.compile(r'https?://\d{1,3}(\.\d{1,3}){3}', re.IGNORECASE)
 
-def extract_urls(text):
-    urls = URL_REGEX.findall(text)
-    cleaned = []
-    seen = set()
-    for url in urls:
-        url = url.rstrip(".,;:!?)")
+
+@dataclass
+class Detection:
+
+    matched: str    # the concrete thing that matched (phrase, URL, domain...)
+    reason: str     # plain-language explanation of why it is suspicious
+    score: int      # points this detection adds to the total
+
+
+# --------------------------------------------------------------------------- #
+# URL extraction and helpers
+# --------------------------------------------------------------------------- #
+
+def extract_urls(text: str) -> list[str]:
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for url in URL_REGEX.findall(text):
+        url = url.rstrip(".,;:!?)")  # strip trailing sentence punctuation
         if url not in seen:
             seen.add(url)
             cleaned.append(url)
     return cleaned
 
 
-def flag_suspicious_urls(urls):
-    flagged = []
-    for url in urls:
-        lower = url.lower()
-        if any(hint in lower for hint in SUSPICIOUS_URL_HINTS):
-            flagged.append(url)
-        elif re.search(r'https?://\d{1,3}(\.\d{1,3}){3}', url):  # raw IP address
-            flagged.append(url)
-        elif "@" in url.split("//", 1)[-1]:  # user@host trick
-            flagged.append(url)
-    return flagged
+def _host_of(url: str) -> str:
+    host = re.sub(r'^https?://', '', url, flags=re.IGNORECASE)
+    host = host.split("/", 1)[0]        # drop path
+    host = host.split("@", 1)[-1]       # drop any user-info prefix
+    host = host.split(":", 1)[0]        # drop port
+    return host.lower()
 
 
-def detect_keywords(text):
+def registered_domain(host: str) -> str:
+    labels = host.split(".")
+    if len(labels) >= 2:
+        return ".".join(labels[-2:])
+    return host
+
+
+# --------------------------------------------------------------------------- #
+# Detection rules
+# --------------------------------------------------------------------------- #
+
+def detect_keywords(text: str) -> list[Detection]:
     lower = text.lower()
-    found = []
-    for phrase, weight in SUSPICIOUS_KEYWORDS.items():
+    detections: list[Detection] = []
+    for phrase, weight in RULES.keywords.items():
         if phrase in lower:
-            found.append((phrase, weight))
-    return found
+            detections.append(
+                Detection(
+                    matched=phrase,
+                    reason=f'Contains the phishing phrase "{phrase}".',
+                    score=weight,
+                )
+            )
+    return detections
 
 
-def score_email(text, header_result=None):
+def detect_suspicious_urls(urls: list[str]) -> list[Detection]:
+    detections: list[Detection] = []
+    for url in urls:
+        host = _host_of(url)
+
+        if any(short in host for short in RULES.url_shorteners):
+            detections.append(
+                Detection(
+                    matched=url,
+                    reason="Uses a URL shortener, which hides the real destination.",
+                    score=RULES.weight("suspicious_url"),
+                )
+            )
+        elif IP_URL_REGEX.match(url):
+            detections.append(
+                Detection(
+                    matched=url,
+                    reason="Links to a raw IP address instead of a domain name.",
+                    score=RULES.weight("ip_address_url"),
+                )
+            )
+        elif "@" in url.split("//", 1)[-1]:
+            detections.append(
+                Detection(
+                    matched=url,
+                    reason="Uses a 'user@host' trick to disguise the real host.",
+                    score=RULES.weight("userinfo_url"),
+                )
+            )
+    return detections
+
+
+def detect_many_urls(urls: list[str]) -> list[Detection]:
+    if len(urls) >= RULES.many_urls_threshold:
+        return [
+            Detection(
+                matched=f"{len(urls)} URLs",
+                reason=f"Contains {len(urls)} links; phishing emails often pack in many.",
+                score=RULES.weight("many_urls"),
+            )
+        ]
+    return []
+
+
+def detect_domain_mismatch(sender_domain: str, urls: list[str]) -> list[Detection]:
+    if not sender_domain:
+        return []
+
+    sender_root = registered_domain(sender_domain)
+    detections: list[Detection] = []
+    already_flagged: set[str] = set()
+
+    for url in urls:
+        link_root = registered_domain(_host_of(url))
+        if link_root and link_root != sender_root and link_root not in already_flagged:
+            already_flagged.add(link_root)
+            detections.append(
+                Detection(
+                    matched=url,
+                    reason=(
+                        f"Sender domain is '{sender_root}' but this link points "
+                        f"to '{link_root}'."
+                    ),
+                    score=RULES.weight("domain_mismatch"),
+                )
+            )
+    return detections
+
+
+def detect_header_signals(header_result: dict | None) -> list[Detection]:
+    if not header_result:
+        return []
+
+    detections: list[Detection] = []
+    auth = header_result["auth"]
+
+    auth_rules = {"spf": "spf_fail", "dkim": "dkim_fail", "dmarc": "dmarc_fail"}
+    for mech, rule_name in auth_rules.items():
+        if auth.get(mech) == "fail":
+            detections.append(
+                Detection(
+                    matched=f"{mech.upper()}=fail",
+                    reason=f"{mech.upper()} authentication failed, suggesting a forged sender.",
+                    score=RULES.weight(rule_name),
+                )
+            )
+
+    for flag in header_result["flags"]:
+        if "Display name" in flag:
+            detections.append(
+                Detection(matched=flag, reason=flag, score=RULES.weight("display_name_spoof"))
+            )
+        elif "differs from" in flag:
+            detections.append(
+                Detection(matched=flag, reason=flag, score=RULES.weight("replyto_mismatch"))
+            )
+    return detections
+
+
+# --------------------------------------------------------------------------- #
+# Scoring
+# --------------------------------------------------------------------------- #
+
+def _risk_level(score: int) -> str:
+    if score >= RULES.high_threshold:
+        return "High"
+    if score >= RULES.medium_threshold:
+        return "Medium"
+    return "Low"
+
+
+def score_email(text: str, header_result: dict | None = None) -> dict:
     urls = extract_urls(text)
-    suspicious_urls = flag_suspicious_urls(urls)
-    keywords = detect_keywords(text)
+    sender_domain = header_result["from_domain"] if header_result else ""
 
-    score = 0
-    breakdown = []  # list of (reason, points)
+    keyword_hits = detect_keywords(text)
+    url_hits = detect_suspicious_urls(urls)
+    url_hits += detect_domain_mismatch(sender_domain, urls)
+    many_url_hits = detect_many_urls(urls)
+    header_hits = detect_header_signals(header_result)
 
-    # --- Content signals ---
-    for phrase, weight in keywords:
-        score += weight
-        breakdown.append((f"Keyword: \"{phrase}\"", weight))
+    detections = keyword_hits + url_hits + many_url_hits + header_hits
 
-    for url in suspicious_urls:
-        score += 3
-        breakdown.append((f"Suspicious URL: {url}", 3))
+    score = min(sum(d.score for d in detections), 100)
 
-    if len(urls) >= 3:
-        score += 2
-        breakdown.append((f"Many links ({len(urls)} URLs)", 2))
-
-    # --- Header signals ---
-    header_flags = []
-    if header_result:
-        header_flags = header_result["flags"]
-        auth = header_result["auth"]
-
-        if auth["dkim"] == "fail":
-            score += 3
-            breakdown.append(("DKIM authentication failed", 3))
-        if auth["spf"] == "fail":
-            score += 3
-            breakdown.append(("SPF authentication failed", 3))
-        if auth["dmarc"] == "fail":
-            score += 4
-            breakdown.append(("DMARC authentication failed", 4))
-
-        # Spoofing / mismatch flags
-        for flag in header_flags:
-            if "Display name" in flag or "differs from" in flag:
-                score += 4
-                breakdown.append((flag, 4))
-
-    score = min(score, 100)
-
-    if score >= 10:
-        level = "High"
-    elif score >= 5:
-        level = "Medium"
-    else:
-        level = "Low"
+    suspicious_urls = [d.matched for d in url_hits]
+    breakdown = [(d.reason, d.score) for d in detections]
 
     return {
         "score": score,
-        "level": level,
+        "level": _risk_level(score),
         "urls": urls,
         "suspicious_urls": suspicious_urls,
-        "keywords": keywords,
-        "header_flags": header_flags,
+        "keywords": [(d.matched, d.score) for d in keyword_hits],
+        "header_flags": header_result["flags"] if header_result else [],
+        "detections": detections,
         "breakdown": breakdown,
+        "sender_domain": sender_domain,
     }
