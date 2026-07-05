@@ -1,0 +1,27 @@
+{
+  "_comment": "Suspicious phrases commonly found in phishing emails. Each weight reflects how strong a signal the phrase is (1 = weak, 3 = strong).",
+  "keywords": {
+    "verify your account": 3,
+    "verify your identity": 3,
+    "confirm your password": 3,
+    "update your payment": 3,
+    "suspended": 2,
+    "unusual activity": 2,
+    "click here": 2,
+    "act now": 2,
+    "urgent": 2,
+    "immediately": 2,
+    "limited time": 2,
+    "you have won": 3,
+    "congratulations": 1,
+    "gift card": 2,
+    "wire transfer": 3,
+    "bank account": 2,
+    "social security": 3,
+    "login to confirm": 3,
+    "account will be closed": 3,
+    "final notice": 2,
+    "dear customer": 1,
+    "dear user": 1
+  }
+}

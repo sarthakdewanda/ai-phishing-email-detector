@@ -1,0 +1,17 @@
+{
+  "_comment": "Brand names that phishers often impersonate.",
+  "known_brands": [
+    "paypal",
+    "amazon",
+    "apple",
+    "microsoft",
+    "google",
+    "netflix",
+    "bank",
+    "facebook",
+    "instagram",
+    "linkedin",
+    "dhl",
+    "fedex"
+  ]
+}

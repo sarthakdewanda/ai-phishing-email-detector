@@ -1,0 +1,15 @@
+{
+  "_comment": "Known URL-shortening services.",
+  "url_shorteners": [
+    "bit.ly",
+    "tinyurl.com",
+    "goo.gl",
+    "t.co",
+    "ow.ly",
+    "is.gd",
+    "buff.ly",
+    "rebrand.ly",
+    "cutt.ly",
+    "shorturl.at"
+  ]
+}
