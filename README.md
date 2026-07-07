@@ -1,6 +1,6 @@
 # 🛡️ AI Phishing Email Detector
 
-A Streamlit app that analyzes emails for phishing indicators — combining content analysis, link analysis, email header authentication checks, and a local AI-generated explanation of the red flags.
+A Streamlit app that analyzes emails for phishing indicators, combining content analysis, link analysis, email header authentication checks, and a local AI-generated explanation of the red flags.
 
 ![App Homepage](screenshots/00-homepage.png)
 
@@ -27,11 +27,9 @@ A Streamlit app that analyzes emails for phishing indicators — combining conte
 
 ## Overview
 
-Phishing emails rely on two things working together: convincing content and a spoofed or unauthenticated sender. Most simple detectors only look at the first. This project analyzes both — parsing the actual email headers to check SPF/DKIM/DMARC results and sender spoofing, alongside keyword, URL, and sender/link domain analysis — then uses a locally-run AI model (via Ollama) to explain the findings in plain English.
+Phishing emails rely on two things working together: convincing content and a spoofed or unauthenticated sender. Most simple detectors only look at the first. This project analyzes both parsing the actual email headers to check SPF/DKIM/DMARC results and sender spoofing, alongside keyword, URL, and sender/link domain analysis. Then uses a locally-run AI model (via Ollama) to explain the findings in plain English.
 
-Every detection rule — keywords, URL shorteners, impersonated brands, and score weights — lives in plain JSON config files rather than hard-coded in the Python. This keeps the detection logic and the detection data cleanly separated, and means the rules can be tuned without touching any code.
-
-Built as a small, self-contained portfolio project. No database, no accounts, no external APIs, no ML — everything runs locally on your machine.
+Every detection rule like keywords, URL shorteners, impersonated brands, and score weights lives in plain JSON config files rather than hard-coded in the Python. This keeps the detection logic and the detection data cleanly separated, and means the rules can be tuned without touching any code.
 
 ---
 
@@ -90,7 +88,7 @@ Built as a small, self-contained portfolio project. No database, no accounts, no
 | `ai_explain.py` | Sends findings to a local Ollama model and streams back a plain-language explanation |
 | `app.py` | Streamlit UI that ties everything together |
 
-> **No network calls for header analysis.** SPF/DKIM/DMARC results are read directly from the `Authentication-Results` header already stamped by the receiving mail server — not re-verified via live DNS. Domain comparisons are done with simple string matching, not WHOIS or reputation lookups.
+> **No network calls for header analysis.** SPF/DKIM/DMARC results are read directly from the `Authentication-Results` header already stamped by the receiving mail server, not re-verified via live DNS. Domain comparisons are done with simple string matching, not WHOIS or reputation lookups.
 
 ---
 
@@ -131,7 +129,7 @@ Built as a small, self-contained portfolio project. No database, no accounts, no
 ## Prerequisites
 
 - Python 3.9+
-- [Ollama](https://ollama.com) installed locally (optional — the app falls back to a rule-based summary without it)
+- [Ollama](https://ollama.com) installed locally (the app falls back to a rule-based summary without it)
 
 ---
 
@@ -151,9 +149,9 @@ Download and install from [ollama.com/download](https://ollama.com/download), th
 ollama pull llama3.2
 ```
 
-Ollama runs automatically in the background on Windows/macOS after install. Verify it's running by opening `http://localhost:11434` in a browser — it should say **"Ollama is running."**
+Ollama runs automatically in the background on Windows/macOS after install. Verify it's running by opening `http://localhost:11434` in a browser. It should say **"Ollama is running."**
 
-> If Ollama isn't running, the app still works — it shows a rule-based summary instead of the AI explanation.
+> If Ollama isn't running, the app still works. It shows a rule-based summary instead of the AI explanation.
 
 ### 3. Run the App
 
@@ -161,7 +159,7 @@ Ollama runs automatically in the background on Windows/macOS after install. Veri
 streamlit run app.py
 ```
 
-Make sure the `config/` folder (with its four `.json` files) sits in the same directory as `app.py` — the app loads it automatically on startup.
+Make sure the `config/` folder (with its four `.json` files) sits in the same directory as `app.py`. The app loads it automatically on startup.
 
 ---
 
@@ -211,7 +209,7 @@ Restart the app after editing a config file for changes to take effect.
 
 ## Notes & Limitations
 
-- This is a demonstration/portfolio project using **sample or test emails only** — do not paste real personal or customer emails into it.
+- This is a demonstration/portfolio project using **sample or test emails only**. Do not paste real personal or customer emails into it.
 - Header analysis reads existing authentication verdicts; it does not perform live DNS lookups or cryptographic re-verification of SPF/DKIM.
 - The sender-vs-link domain check uses a simplified "last two labels" approximation of the registered domain (e.g. `mail.paypal.com` → `paypal.com`). This is easy to explain and works well for common cases, but isn't a full public-suffix-list implementation, so it can be imprecise for domains like `example.co.uk`.
 - The keyword list is intentionally small and heuristic-based — a real production system would use more robust NLP/ML techniques. This project favors transparency and simplicity over completeness.
